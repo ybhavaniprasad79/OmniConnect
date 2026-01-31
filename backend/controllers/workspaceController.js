@@ -48,6 +48,15 @@ const pendingJoinRequests = async (req, res) => {
   }
 };
 
+const listMembers = async (req, res) => {
+  try {
+    const members = await Member.find({ workspace: req.params.id });
+    res.json(members);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
 const acceptJoinRequest = async (req, res) => {
   try {
     const jr = await JoinRequest.findById(req.params.requestId);
@@ -84,6 +93,7 @@ module.exports = {
   listWorkspacesForManager,
   getWorkspace,
   pendingJoinRequests,
+  listMembers,
   acceptJoinRequest,
   rejectJoinRequest,
 };

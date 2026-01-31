@@ -7,6 +7,7 @@ import SignupPage from "./pages/SignupPage";
 import LoginPage from "./pages/LoginPage";
 import JoinWorkspacePage from "./pages/JoinWorkspacePage";
 import DashboardPage from "./pages/DashboardPage";
+import WorkspaceManagePage from "./pages/WorkspaceManagePage";
 
 function App() {
   const [user, setUser] = useState(null);
@@ -38,6 +39,16 @@ function App() {
           path="/dashboard"
           element={
             user ? <DashboardPage user={user} /> : <Navigate to="/login" />
+          }
+        />
+        <Route
+          path="/dashboard/workspaces/:wsId"
+          element={
+            user ? (
+              <WorkspaceManagePage user={user} />
+            ) : (
+              <Navigate to="/login" />
+            )
           }
         />
       </Routes>

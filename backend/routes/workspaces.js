@@ -9,6 +9,7 @@ router.post("/", controller.createWorkspace);
 router.get("/", controller.listWorkspacesForManager);
 router.get("/:id", controller.getWorkspace);
 router.get("/:id/pending-joins", controller.pendingJoinRequests);
+router.get("/:id/members", controller.listMembers);
 router.post(
   "/:id/join-requests/:requestId/accept",
   controller.acceptJoinRequest,

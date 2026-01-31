@@ -7,7 +7,9 @@ export default function JoinWorkspacePage() {
   const nav = useNavigate();
   const [form, setForm] = useState({
     name: "",
+    whatsappCountry: "+91",
     whatsappNumber: "",
+    phoneCountry: "+91",
     phoneNumber: "",
     email: "",
   });
@@ -20,10 +22,30 @@ export default function JoinWorkspacePage() {
     setError("");
     setLoading(true);
     try {
+      const normalize = (cc, num) => {
+        if (!num) return "";
+        const cleaned = String(num).replace(/[^\d+]/g, "");
+        if (cleaned.startsWith("+")) return cleaned;
+        cc = String(cc || "").replace(/[^\d+]/g, "");
+        if (!cc) return `+${cleaned}`;
+        if (!cc.startsWith("+")) cc = `+${cc}`;
+        return `${cc}${cleaned}`;
+      };
+
+      const payload = {
+        workspaceId: wsId,
+        name: form.name,
+        whatsappCountry: form.whatsappCountry,
+        phoneCountry: form.phoneCountry,
+        whatsappNumber: normalize(form.whatsappCountry, form.whatsappNumber),
+        phoneNumber: normalize(form.phoneCountry, form.phoneNumber),
+        email: form.email,
+      };
+
       await api("/api/public/join", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ workspaceId: wsId, ...form }),
+        body: JSON.stringify(payload),
       });
       setSuccess(true);
       setTimeout(() => nav("/"), 2000);
@@ -74,23 +96,53 @@ export default function JoinWorkspacePage() {
             className="w-full px-4 py-3 bg-gray-50 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
             required
           />
-          <input
-            type="tel"
-            placeholder="WhatsApp Number (e.g., +1234567890)"
-            value={form.whatsappNumber}
-            onChange={(e) =>
-              setForm({ ...form, whatsappNumber: e.target.value })
-            }
-            className="w-full px-4 py-3 bg-gray-50 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
-            required
-          />
-          <input
-            type="tel"
-            placeholder="Phone Number"
-            value={form.phoneNumber}
-            onChange={(e) => setForm({ ...form, phoneNumber: e.target.value })}
-            className="w-full px-4 py-3 bg-gray-50 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
+          <div className="flex gap-2">
+            <select
+              value={form.whatsappCountry}
+              onChange={(e) =>
+                setForm({ ...form, whatsappCountry: e.target.value })
+              }
+              className="w-28 px-3 py-3 bg-gray-50 border border-gray-300 rounded-xl focus:outline-none text-sm"
+            >
+              <option value="+91">+91 (IN)</option>
+              <option value="+1">+1 (US)</option>
+              <option value="+44">+44 (UK)</option>
+              <option value="+61">+61 (AU)</option>
+            </select>
+            <input
+              type="tel"
+              placeholder="WhatsApp Number (local)"
+              value={form.whatsappNumber}
+              onChange={(e) =>
+                setForm({ ...form, whatsappNumber: e.target.value })
+              }
+              className="flex-1 px-4 py-3 bg-gray-50 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+              required
+            />
+          </div>
+          <div className="flex gap-2">
+            <select
+              value={form.phoneCountry}
+              onChange={(e) =>
+                setForm({ ...form, phoneCountry: e.target.value })
+              }
+              className="w-28 px-3 py-3 bg-gray-50 border border-gray-300 rounded-xl focus:outline-none text-sm"
+            >
+              <option value="+91">+91 (IN)</option>
+              <option value="+1">+1 (US)</option>
+              <option value="+44">+44 (UK)</option>
+              <option value="+61">+61 (AU)</option>
+            </select>
+            <input
+              type="tel"
+              placeholder="Phone Number (local)"
+              value={form.phoneNumber}
+              onChange={(e) =>
+                setForm({ ...form, phoneNumber: e.target.value })
+              }
+              className="flex-1 px-4 py-3 bg-gray-50 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
           <input
             type="email"
             placeholder="Email Address"
