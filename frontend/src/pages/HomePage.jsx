@@ -18,7 +18,13 @@ export default function HomePage() {
   const [joinLoading, setJoinLoading] = useState(false);
   const [joinError, setJoinError] = useState("");
   const [joinSuccess, setJoinSuccess] = useState(false);
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
   const nav = useNavigate();
+
+  useEffect(() => {
+    const token = localStorage.getItem("token");
+    setIsLoggedIn(!!token);
+  }, []);
 
   const handleSearch = async (query) => {
     if (!query.trim()) {
@@ -260,14 +266,16 @@ export default function HomePage() {
                 </div>
               </div>
 
-              <div className="text-center mt-8 lg:mt-0">
-                <a
-                  href="/signup"
-                  className="inline-block px-12 py-4 bg-gradient-to-r from-blue-600 to-indigo-600 text-white text-lg font-semibold rounded-2xl shadow-xl hover:shadow-2xl hover:scale-105 transition"
-                >
-                  Create Workspace
-                </a>
-              </div>
+              {!isLoggedIn && (
+                <div className="text-center mt-8 lg:mt-0">
+                  <a
+                    href="/signup"
+                    className="inline-block px-12 py-4 bg-gradient-to-r from-blue-600 to-indigo-600 text-white text-lg font-semibold rounded-2xl shadow-xl hover:shadow-2xl hover:scale-105 transition"
+                  >
+                    Create Workspace
+                  </a>
+                </div>
+              )}
             </div>
           </div>
         </section>
