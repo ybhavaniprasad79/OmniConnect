@@ -33,7 +33,5 @@ app.use((err, req, res, next) => {
 });
 
 app.listen(PORT, () => {
-  console.log(
-    `OmniConnect backend listening on port http://localhost:${PORT}`,
-  );
+  console.log(`OmniConnect backend listening on port http://localhost:${PORT}`);
 });

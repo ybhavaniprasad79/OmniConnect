@@ -36,12 +36,46 @@ const logDelivery = async ({
   response,
 }) => {
   try {
+    // Helper to strip functions/circular refs
+    const safePlain = (obj) => {
+      if (!obj || typeof obj !== "object") return obj;
+      try {
+        return JSON.parse(JSON.stringify(obj));
+      } catch (e) {
+        return { error: "unserializable_response", message: e.message };
+      }
+    };
+
+    // Sanitize response to avoid BSON circular structure errors
+    let sanitizedResponse = response;
+    if (response && response.sid) {
+      // Extract only safe fields from Twilio-style response wrappers
+      sanitizedResponse = {
+        success: response.success || false,
+        provider: response.provider,
+        sid: response.sid,
+        status: response.status,
+        info: response.info
+          ? {
+              sid: response.info.sid,
+              status: response.info.status,
+              errorCode: response.info.errorCode,
+              errorMessage: response.info.errorMessage,
+              to: response.info.to,
+              from: response.info.from,
+            }
+          : null,
+      };
+    } else if (response && typeof response === "object") {
+      // Generic objects (e.g. { note, detail: polled })
+      sanitizedResponse = safePlain(response);
+    }
     await DeliveryLog.create({
       announcement,
       member,
       channel,
       success,
-      response,
+      response: sanitizedResponse,
     });
   } catch (err) {
     console.error("Failed to write delivery log", err);
@@ -58,9 +92,18 @@ const realSendWhatsApp = async (member, message) => {
     };
   try {
     const from = process.env.TWILIO_WHATSAPP_FROM; // e.g. 'whatsapp:+123...'
-    const to = member.whatsappNumber
-      ? `whatsapp:${member.whatsappNumber}`
-      : null;
+    // Normalize WhatsApp number: ensure it has country code
+    let num = String(member.whatsappNumber || "").replace(/[^\d+]/g, "");
+    if (!num.startsWith("+")) {
+      if (num.length === 10) {
+        num = "+91" + num; // India default for 10-digit numbers
+      } else if (num.length > 10) {
+        num = "+" + num;
+      } else {
+        num = "+91" + num;
+      }
+    }
+    const to = num ? `whatsapp:${num}` : null;
     if (!from || !to)
       return {
         success: false,
@@ -91,11 +134,28 @@ const realSendSMS = async (member, message) => {
   try {
     const from =
       process.env.TWILIO_SMS_FROM || process.env.TWILIO_WHATSAPP_FROM;
-    const to = member.whatsappNumber
-      ? `+${member.whatsappNumber}`.replace(/^\+?\+/, "+")
-      : null;
+    // Use phoneNumber for SMS, or fallback to whatsappNumber
+    const phoneToUse = member.phoneNumber || member.whatsappNumber;
+    let to = null;
+    if (phoneToUse) {
+      // Normalize: ensure it starts with + and country code
+      let num = String(phoneToUse).replace(/[^\d+]/g, "");
+      // If it doesn't start with +, prepend +91 (India default)
+      if (!num.startsWith("+")) {
+        if (num.length === 10) {
+          // Assume India for 10-digit numbers
+          num = "+91" + num;
+        } else if (num.length > 10) {
+          num = "+" + num;
+        } else {
+          num = "+91" + num;
+        }
+      }
+      to = num;
+    }
     if (!from || !to)
       return { success: false, provider: "sms", info: "missing_from_or_to" };
+    console.log(`[SMS] Sending from ${from} to ${to}`);
     const sent = await twilioClient.messages.create({
       from,
       to,
@@ -184,9 +244,14 @@ const pollTwilioMessageStatus = async (
 
 const attemptSendWithFallback = async (announcement, member) => {
   const message = `${announcement.title}\n\n${announcement.message}`;
+  console.log(
+    `[Dispatch] Attempting send to ${member.name} (${member.whatsappNumber})`,
+  );
 
   // 1. WhatsApp - send then wait for delivery for configured time
+  console.log(`[WhatsApp] Attempting send to ${member.whatsappNumber}`);
   let res = await sendWhatsApp(member, message);
+  console.log(`[WhatsApp] Response:`, res);
   await logDelivery({
     announcement: announcement._id,
     member: member._id,
@@ -197,17 +262,22 @@ const attemptSendWithFallback = async (announcement, member) => {
 
   // If Twilio was used and returned sid, poll for final delivery status
   if (twilioClient && res && res.sid) {
+    console.log(`[WhatsApp] Polling SID ${res.sid} for delivery status`);
     const waitMs = parseInt(process.env.WAIT_WHATSAPP_MS || "120000", 10); // default 2 minutes
     const pollInterval = parseInt(
       process.env.WHATSAPP_POLL_INTERVAL_MS || "15000",
       10,
     );
     const polled = await pollTwilioMessageStatus(res.sid, waitMs, pollInterval);
+    console.log(`[WhatsApp] Poll result:`, polled);
     if (
       polled &&
       polled.final &&
       (polled.status === "delivered" || polled.status === "read")
     ) {
+      console.log(
+        `[WhatsApp] ✓ Delivered successfully (will still send SMS backup)`,
+      );
       await logDelivery({
         announcement: announcement._id,
         member: member._id,
@@ -215,23 +285,30 @@ const attemptSendWithFallback = async (announcement, member) => {
         success: true,
         response: polled.info,
       });
-      return { channel: "whatsapp", success: true, response: polled.info };
+    } else {
+      console.log(
+        `[WhatsApp] ✗ Not delivered within window, falling back to SMS`,
+      );
+      await logDelivery({
+        announcement: announcement._id,
+        member: member._id,
+        channel: "whatsapp",
+        success: false,
+        response: { note: "not_delivered_within_window", detail: polled },
+      });
     }
-    // not delivered within wait window -> proceed to SMS
-    await logDelivery({
-      announcement: announcement._id,
-      member: member._id,
-      channel: "whatsapp",
-      success: false,
-      response: { note: "not_delivered_within_window", detail: polled },
-    });
   } else if (res && res.success) {
     // for mocks or non-twilio positive response, treat as success
+    console.log(`[WhatsApp] ✓ Mock success`);
     return { channel: "whatsapp", success: true, response: res };
+  } else {
+    console.log(`[WhatsApp] ✗ Failed, falling back to SMS`);
   }
 
   // 2. SMS
+  console.log(`[SMS] Attempting send to ${member.whatsappNumber}`);
   res = await sendSMS(member, message);
+  console.log(`[SMS] Response:`, res);
   await logDelivery({
     announcement: announcement._id,
     member: member._id,
@@ -239,14 +316,22 @@ const attemptSendWithFallback = async (announcement, member) => {
     success: !!res.success,
     response: res,
   });
-  if (res.success && (!res.sid || !twilioClient))
-    return { channel: "sms", success: true, response: res };
 
-  // If Twilio was used for SMS and returned sid, we could poll similarly, but for now use immediate result
+  if (res && res.success && (!res.sid || !twilioClient)) {
+    console.log(`[SMS] ✓ Success`);
+    return { channel: "sms", success: true, response: res };
+  }
+
+  // If Twilio was used for SMS and returned sid, check delivery
   if (res && res.sid && twilioClient) {
+    console.log(`[SMS] Checking delivery status for SID ${res.sid}`);
     try {
       const fetched = await twilioClient.messages(res.sid).fetch();
-      if (fetched.status === "delivered") {
+      console.log(
+        `[SMS] Status: ${fetched.status}, to: ${fetched.to}, errorCode: ${fetched.errorCode}, errorMessage: ${fetched.errorMessage}`,
+      );
+      if (fetched.status === "delivered" || fetched.status === "sent") {
+        console.log(`[SMS] ✓ Delivered/sent`);
         await logDelivery({
           announcement: announcement._id,
           member: member._id,
@@ -256,13 +341,17 @@ const attemptSendWithFallback = async (announcement, member) => {
         });
         return { channel: "sms", success: true, response: fetched };
       }
+      console.log("[SMS] ✗ Not delivered, falling back to email");
     } catch (err) {
+      console.log(`[SMS] Error checking status:`, err.message);
       // ignore and fall through to email
     }
   }
 
   // 3. Email
+  console.log(`[Email] Attempting send to ${member.email}`);
   res = await sendEmail(member, message);
+  console.log(`[Email] Response:`, res);
   await logDelivery({
     announcement: announcement._id,
     member: member._id,
@@ -270,6 +359,9 @@ const attemptSendWithFallback = async (announcement, member) => {
     success: !!res.success,
     response: res,
   });
+  console.log(
+    `[Email] ✓ Email fallback used (success=${res.success || false})`,
+  );
   return { channel: "email", success: res.success, response: res };
 };
 

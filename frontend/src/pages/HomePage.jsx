@@ -9,7 +9,9 @@ export default function HomePage() {
   const [selectedWs, setSelectedWs] = useState(null);
   const [joinForm, setJoinForm] = useState({
     name: "",
+    whatsappCountry: "+91",
     whatsappNumber: "",
+    phoneCountry: "+91",
     phoneNumber: "",
     email: "",
   });
@@ -39,9 +41,23 @@ export default function HomePage() {
 
   const handleJoinClick = (wsId) => {
     setSelectedWs(wsId);
-    setJoinForm({ name: "", whatsappNumber: "", phoneNumber: "", email: "" });
+    setJoinForm({
+      name: "",
+      whatsappCountry: "+91",
+      whatsappNumber: "",
+      phoneCountry: "+91",
+      phoneNumber: "",
+      email: "",
+    });
     setJoinError("");
     setJoinSuccess(false);
+  };
+
+  const normalizeWithCountry = (countryCode, localNumber) => {
+    const digits = String(localNumber || "").replace(/\D/g, "");
+    if (!digits) return "";
+    const cc = countryCode || "+91";
+    return cc + digits;
   };
 
   const handleJoinSubmit = async (e) => {
@@ -49,17 +65,35 @@ export default function HomePage() {
     setJoinError("");
     setJoinLoading(true);
     try {
+      const normalizedWhatsApp = normalizeWithCountry(
+        joinForm.whatsappCountry,
+        joinForm.whatsappNumber,
+      );
+      const normalizedPhone = normalizeWithCountry(
+        joinForm.phoneCountry,
+        joinForm.phoneNumber,
+      );
+      const payload = {
+        workspaceId: selectedWs,
+        name: joinForm.name,
+        whatsappNumber: normalizedWhatsApp,
+        phoneNumber: normalizedPhone,
+        email: joinForm.email,
+      };
+
       await api("/api/public/join", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ workspaceId: selectedWs, ...joinForm }),
+        body: JSON.stringify(payload),
       });
       setJoinSuccess(true);
       setTimeout(() => {
         setSelectedWs(null);
         setJoinForm({
           name: "",
+          whatsappCountry: "+91",
           whatsappNumber: "",
+          phoneCountry: "+91",
           phoneNumber: "",
           email: "",
         });
@@ -292,28 +326,65 @@ export default function HomePage() {
                     className="w-full px-4 py-3 bg-gray-50 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
                     required
                   />
-                  <input
-                    type="tel"
-                    placeholder="WhatsApp Number (e.g., +1234567890)"
-                    value={joinForm.whatsappNumber}
-                    onChange={(e) =>
-                      setJoinForm({
-                        ...joinForm,
-                        whatsappNumber: e.target.value,
-                      })
-                    }
-                    className="w-full px-4 py-3 bg-gray-50 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-                    required
-                  />
-                  <input
-                    type="tel"
-                    placeholder="Phone Number"
-                    value={joinForm.phoneNumber}
-                    onChange={(e) =>
-                      setJoinForm({ ...joinForm, phoneNumber: e.target.value })
-                    }
-                    className="w-full px-4 py-3 bg-gray-50 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-                  />
+                  <div className="flex gap-2">
+                    <select
+                      value={joinForm.whatsappCountry}
+                      onChange={(e) =>
+                        setJoinForm({
+                          ...joinForm,
+                          whatsappCountry: e.target.value,
+                        })
+                      }
+                      className="w-28 px-3 py-3 bg-gray-50 border border-gray-300 rounded-xl focus:outline-none text-sm"
+                    >
+                      <option value="+91">+91 (IN)</option>
+                      <option value="+1">+1 (US)</option>
+                      <option value="+44">+44 (UK)</option>
+                      <option value="+61">+61 (AU)</option>
+                    </select>
+                    <input
+                      type="tel"
+                      placeholder="WhatsApp Number (local)"
+                      value={joinForm.whatsappNumber}
+                      onChange={(e) =>
+                        setJoinForm({
+                          ...joinForm,
+                          whatsappNumber: e.target.value,
+                        })
+                      }
+                      className="flex-1 px-4 py-3 bg-gray-50 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                      required
+                    />
+                  </div>
+                  <div className="flex gap-2">
+                    <select
+                      value={joinForm.phoneCountry}
+                      onChange={(e) =>
+                        setJoinForm({
+                          ...joinForm,
+                          phoneCountry: e.target.value,
+                        })
+                      }
+                      className="w-28 px-3 py-3 bg-gray-50 border border-gray-300 rounded-xl focus:outline-none text-sm"
+                    >
+                      <option value="+91">+91 (IN)</option>
+                      <option value="+1">+1 (US)</option>
+                      <option value="+44">+44 (UK)</option>
+                      <option value="+61">+61 (AU)</option>
+                    </select>
+                    <input
+                      type="tel"
+                      placeholder="Phone Number (local)"
+                      value={joinForm.phoneNumber}
+                      onChange={(e) =>
+                        setJoinForm({
+                          ...joinForm,
+                          phoneNumber: e.target.value,
+                        })
+                      }
+                      className="flex-1 px-4 py-3 bg-gray-50 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                    />
+                  </div>
                   <input
                     type="email"
                     placeholder="Email Address"
